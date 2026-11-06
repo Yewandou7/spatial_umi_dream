@@ -1,0 +1,17 @@
+# General sensor definitions.
+sensor_type: camera
+comment: DAS Camera cam0
+
+# Sensor extrinsics wrt. the body-frame.
+T_BS:
+  cols: 4
+  rows: 4
+  data: [1, 0, 0, -0.019888, 0, -1, 7.34641e-06, 0.047939, 0, -7.34641e-06, -1, 0.0027105, 0, 0, 0, 1]
+
+# Camera specific definitions.
+rate_hz: 30
+resolution: [640, 480]
+camera_model: kb4
+intrinsics: [307.6002527325072, 285.0139804702816, 318.02244253944235, 238.7838135370599] #fu, fv, cu, cv
+distortion_model: kb4
+distortion_coefficients: [-0.022680603606238345, 0.007678843428862788, -0.008529763933253106, 0.0013180397561499513] #k1, k2, k3, k4

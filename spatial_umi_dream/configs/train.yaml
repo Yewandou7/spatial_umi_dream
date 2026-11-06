@@ -1,0 +1,88 @@
+defaults:
+  - _self_  # the model and data configs below override this file
+  - model
+  - data: umi
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+# Training recipe shared by UMI and RoboTwin. The launchers in scripts/train/ pass only the
+# per-run knobs (paths, batch size, steps, state registers, ...); every other value here is
+# the one the released checkpoints were trained with.
+
+# === Shape knobs used by both the model and the data pipeline ===
+# Latent chunks per sample; the sharded loader emits max_chunk_size*8 stride-3 frames + 1 final frame.
+max_chunk_size: 4
+# Actions per chunk (one chunk = one causal DiT block) and the register width they are padded to.
+action_horizon: 24
+max_action_dim: 32
+# Proprio state registers: off by default; the RoboTwin-UMI recipe and UMI fine-tunes turn them on.
+use_state: false
+max_state_dim: 32
+# State tokens per chunk anchor; total state tokens fed to the DiT = max_chunk_size * state_horizon.
+state_horizon: 1
+# Cross-arm relative state (each arm's pose expressed in the partner arm's frame).
+relative_state: false
+# Video canvas the views assemble into and the VAE encodes. 320x320 -> 20x20 latent -> 100 DiT
+# tokens per frame (model.config.frame_seqlen).
+canvas_height: 320
+canvas_width: 320
+
+# === Trainer ===
+trainer:
+  _target_: spatial_umi_dream.train.WorldActionTrainer
+  _partial_: true
+  _recursive_: false
+  # Optional rank-0 upload of the exact collated BTHWC dataloader video.
+  wandb_dataloader_log_every_steps: 0          # 0 disables media logging
+  wandb_dataloader_video_fps: 10               # UMI 30 Hz sampled with stride 3
+
+wandb_project: spatial-umi-dream
+# Effective batch size; gradient_accumulation_steps is derived from it at startup.
+global_batch_size: null
+# Checkpoint directory to warm-start from (model.safetensors, strict=False). null trains from the
+# Wan2.2 weights referenced in model.yaml.
+pretrained_model_path: null
+# Inference-time autocast switch; read from experiment_cfg/conf.yaml by the policy.
+eval_bf16: true
+
+training_args:
+  _target_: transformers.TrainingArguments
+  output_dir: ???
+  run_name: ???                                # set by the trainer: last component of output_dir
+  remove_unused_columns: false
+  deepspeed: spatial_umi_dream/configs/deepspeed/zero2.json   # relative to the repo root
+  gradient_checkpointing: false
+  bf16: true
+  tf32: true
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 64
+  gradient_accumulation_steps: 1               # overwritten from global_batch_size when set
+  dataloader_num_workers: 2
+  dataloader_pin_memory: true
+  dataloader_persistent_workers: true
+  optim: adamw_torch
+  learning_rate: 1e-5
+  adam_beta1: 0.95
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
+  weight_decay: 1e-5
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  logging_steps: 10
+  num_train_epochs: 1000
+  max_steps: 10000
+  save_strategy: steps
+  save_steps: 2000
+  save_total_limit: 15
+  save_only_model: false
+  report_to: wandb
+  seed: 42
+  do_eval: false
+  ddp_find_unused_parameters: false
+  ddp_bucket_cap_mb: 100
+
+# === Hydra: no output directory, no job logging ===
+hydra:
+  output_subdir: null
+  run:
+    dir: .

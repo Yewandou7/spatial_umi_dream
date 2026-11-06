@@ -1,0 +1,110 @@
+# @package _global_
+
+defaults:
+  - common
+  - _self_
+
+# UMI bimanual handheld data: four synchronized streams per sample
+# [robot0 RGB, robot1 RGB, robot0 depth, robot1 depth], each resized to a 160x160 panel and
+# assembled into the 320x320 canvas. Per arm the state/action is [xyz(3), rot6d(6), gripper(1)];
+# the two arms concatenate to 20 dims (quaternion -> rot6d is done offline by
+# scripts/data/convert_umi_ee_finetune.py).
+
+dataset_shard_sampling_rate: 0.1
+
+metadata_versions:
+  umi: '0221'
+
+# Converted UMI LeRobot dataset roots, e.g. umi_data_roots=[/data/umi_a,/data/umi_b]. One mixture
+# entry holds every root with the weight distributed by valid step count; for explicit per-root
+# weights override train_dataset.mixture_spec instead (see scripts/train/train_umi.sh).
+umi_data_roots: ???
+
+video_keys: ${modality_configs.umi.video.modality_keys}
+
+modality_configs:
+  umi:
+    video:
+      _target_: spatial_umi_dream.data.dataset.ModalityConfig
+      delta_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+      eval_delta_indices: [0]
+      modality_keys:
+        - video.robot0_camera
+        - video.robot1_camera
+        - video.robot0_depth
+        - video.robot1_depth
+    state:
+      _target_: spatial_umi_dream.data.dataset.ModalityConfig
+      delta_indices: [0]
+      modality_keys:
+        - state.left_pose
+        - state.left_gripper
+        - state.right_pose
+        - state.right_gripper
+    action:
+      _target_: spatial_umi_dream.data.dataset.ModalityConfig
+      delta_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+      modality_keys:
+        - action.left_pose
+        - action.left_gripper
+        - action.right_pose
+        - action.right_gripper
+    language:
+      _target_: spatial_umi_dream.data.dataset.ModalityConfig
+      delta_indices: [0]
+      modality_keys:
+        - annotation.task
+
+transforms:
+  umi:
+    _target_: spatial_umi_dream.data.transform.ComposedModalityTransform
+    transforms:
+      - ${video_to_tensor}
+      - ${video_crop}
+      - ${video_resize}
+      - ${video_color_jitter}
+      - ${video_to_numpy}
+
+      - _target_: spatial_umi_dream.data.transform.StateActionToTensor
+        apply_to: ${modality_configs.umi.state.modality_keys}
+      - _target_: spatial_umi_dream.data.transform.StateActionTransform
+        apply_to: ${modality_configs.umi.state.modality_keys}
+        normalization_modes:
+          state.left_pose: q99
+          state.left_gripper: q99
+          state.right_pose: q99
+          state.right_gripper: q99
+        # rot6d dims (3:9 of [xyz, rot6d]) are unit-vector components already in [-1, 1];
+        # q99 rescaling would distort the rotation geometry.
+        identity_normalization_dims:
+          state.left_pose: [3, 4, 5, 6, 7, 8]
+          state.right_pose: [3, 4, 5, 6, 7, 8]
+        relative_state: ${relative_state}
+        relative_state_keys: ${relative_state_keys}
+
+      - _target_: spatial_umi_dream.data.transform.StateActionToTensor
+        apply_to: ${modality_configs.umi.action.modality_keys}
+      - _target_: spatial_umi_dream.data.transform.StateActionTransform
+        apply_to: ${modality_configs.umi.action.modality_keys}
+        normalization_modes:
+          action.left_pose: q99
+          action.left_gripper: q99
+          action.right_pose: q99
+          action.right_gripper: q99
+        identity_normalization_dims:
+          action.left_pose: [3, 4, 5, 6, 7, 8]
+          action.right_pose: [3, 4, 5, 6, 7, 8]
+
+      - _target_: spatial_umi_dream.data.transform.ConcatTransform
+        video_concat_order: ${modality_configs.umi.video.modality_keys}
+        state_concat_order: ${modality_configs.umi.state.modality_keys}
+        action_concat_order: ${modality_configs.umi.action.modality_keys}
+
+      - ${policy_transform}
+
+train_dataset:
+  mixture_spec:
+    - dataset_path:
+        umi: ${umi_data_roots}
+      dataset_weight: 1.0
+      distribute_weights: true

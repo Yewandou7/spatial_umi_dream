@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=67", "wheel", "pip"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spatial-umi-dream"
+description = "Spatial-pixel RGB + depth world action model for UMI bimanual manipulation"
+version="1.0.0"
+readme = "README.md"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+authors = [
+    {name = "Weiduo Yuan"},
+    {name = "Ze Yuan"},
+    {name = "Sihan Liu"},
+    {name = "Jionghao Wang"},
+    {name = "Liang Heng"},
+    {name = "Zhenyu Zhao"},
+    {name = "Yue Wang"},
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    "flash-attn==2.8.3",
+    "numpy==1.26.4",
+    "transformers==4.51.3",
+    "diffusers==0.30.2",
+    "accelerate",
+    # 0.18.x makes every training step several times slower (CPU-side gradient accumulation).
+    "deepspeed==0.17.6",
+    "safetensors",
+    "huggingface_hub",
+    "hydra-core",
+    "omegaconf",
+    "pydantic",
+    "einops==0.8.1",
+    "ftfy",
+    "regex",
+    "sentencepiece",
+    "dm-tree",
+    "pandas",
+    "pyarrow==22.0.0",  # 23+ requires NumPy 2
+    "pyyaml",
+    "scipy",
+    "tqdm",
+    "decord2",
+    "imageio-ffmpeg",
+    "opencv-python==4.8.0.74",
+    "wandb==0.28.0",
+    "tyro",
+    "websockets",
+    "openpi-client==0.1.1",
+]
+
+[project.urls]
+Homepage = "https://weiduoyuan.com/spatial-umi-dream/"
+Repository = "https://github.com/Yewandou7/spatial_umi_dream"
+Paper = "https://arxiv.org/abs/2611.07229"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu129" }
+torchvision = { index = "pytorch-cu129" }
+# Prebuilt wheel (building flash-attn needs the installed torch); Linux x86_64, CPython 3.11.
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl" }
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spatial_umi_dream*"]
+
+[tool.setuptools]
+include-package-data = true

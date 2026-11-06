@@ -1,0 +1,125 @@
+# @package _global_
+
+# Shared by the UMI and RoboTwin data configs: dataset defaults, the mixture skeleton, the video
+# transform nodes the per-embodiment pipelines splice in, and the policy transform / collator.
+# A data config defines `video_keys`, `modality_configs.<embodiment>`,
+# `transforms.<embodiment>` and `train_dataset.mixture_spec`.
+
+################################################################################
+# Dataset
+################################################################################
+
+# Normalization statistics come from each dataset's own meta/ (global metadata is not supported).
+use_global_metadata: false
+# Per-embodiment fps override; empty means the dataset default.
+fps: {}
+# Keep only the first N episodes of meta/episodes.jsonl (overfit / debug runs); null uses all.
+max_trajectories: null
+# Fraction of each shard's anchors yielded before moving to the next shard.
+dataset_shard_sampling_rate: 1.0
+
+# SE(3) relative actions on the 9D [xyz, rot6d] pose sub-keys (delta to the chunk anchor pose).
+# Gripper sub-keys are absent from the list and stay absolute.
+relative_action: true
+relative_action_keys:
+  - left_pose
+  - right_pose
+# Pose sub-keys expressed in the partner arm's frame when `relative_state` is on; they bypass
+# q99 normalization because the stats were computed on absolute poses.
+relative_state_keys:
+  - left_pose
+  - right_pose
+
+# Per-view panel size; the four panels tile the canvas_height x canvas_width canvas:
+#   [robot0 RGB | robot0 depth]
+#   [robot1 RGB | robot1 depth]
+image_resolution_height: 160
+image_resolution_width: 160
+
+# Photometric augmentation is RGB-only; geometry transforms see all four streams.
+rgb_video_keys:
+  - video.robot0_camera
+  - video.robot1_camera
+
+train_dataset:
+  _target_: spatial_umi_dream.data.dataset.sharded.ShardedLeRobotMixtureDataset.from_mixture_spec
+  _convert_: object
+  mixture_spec: ???
+  dataset_class: spatial_umi_dream.data.dataset.sharded.ShardedLeRobotSE3DeltaSingleDataset
+  all_modality_configs: ${modality_configs}
+  all_transforms: ${transforms}
+  metadata_versions: ${metadata_versions}
+  fps: ${fps}
+  dataset_kwargs:
+    video_backend: decord
+    use_global_metadata: ${use_global_metadata}
+    max_chunk_size: ${max_chunk_size}
+    relative_action: ${relative_action}
+    relative_action_keys: ${relative_action_keys}
+    relative_state: ${relative_state}
+    relative_state_keys: ${relative_state_keys}
+    max_trajectories: ${max_trajectories}
+  mixture_kwargs:
+    training: true
+    balance_dataset_weights: false
+    seed: 42
+    shard_sampling_rate: ${dataset_shard_sampling_rate}
+
+################################################################################
+# Video transforms (geometry on every stream, photometric on RGB only)
+################################################################################
+
+video_to_tensor:
+  _target_: spatial_umi_dream.data.transform.VideoToTensor
+  apply_to: ${video_keys}
+
+video_crop:
+  _target_: spatial_umi_dream.data.transform.VideoCrop
+  apply_to: ${video_keys}
+  scale: 0.95
+  mode: random
+
+video_resize:
+  _target_: spatial_umi_dream.data.transform.VideoResize
+  apply_to: ${video_keys}
+  height: ${image_resolution_height}
+  width: ${image_resolution_width}
+  interpolation: linear
+
+video_color_jitter:
+  _target_: spatial_umi_dream.data.transform.VideoColorJitter
+  apply_to: ${rgb_video_keys}
+  brightness: 0.3
+  contrast: 0.4
+  saturation: 0.5
+  hue: 0.08
+
+video_to_numpy:
+  _target_: spatial_umi_dream.data.transform.VideoToNumpy
+  apply_to: ${video_keys}
+
+################################################################################
+# Policy transform (last step of every pipeline) and collator
+################################################################################
+
+# umt5 token budget for the prompt.
+max_length: 512
+
+policy_transform:
+  _target_: spatial_umi_dream.data.policy_transform.PolicyInputTransform
+  default_instruction: "Perform the default behavior."
+  always_use_default_instruction: false
+  use_state: ${use_state}
+  max_state_dim: ${max_state_dim}
+  state_horizon: ${state_horizon}
+  canvas_height: ${canvas_height}
+  canvas_width: ${canvas_width}
+  max_action_dim: ${max_action_dim}
+  action_horizon: ${action_horizon}
+  max_length: ${max_length}
+  tokenizer_path: ${tokenizer_path}
+
+data_collator:
+  _target_: spatial_umi_dream.data.policy_transform.PolicyCollator
+  tokenizer_path: ${tokenizer_path}
+  max_length: ${max_length}

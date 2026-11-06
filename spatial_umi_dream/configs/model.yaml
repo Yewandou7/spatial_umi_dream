@@ -1,0 +1,44 @@
+# @package _global_
+
+# World action model on the Wan2.2-TI2V-5B backbone: causal DiT with action (and optional state)
+# registers over the 48-channel Wan2.2 VAE latent, umt5-xxl text encoder, CLIP image encoder
+# for the first frame.
+
+# Pretrained Wan weights. null fetches the file from the HuggingFace hub; the launchers pass the
+# local checkout under checkpoints/.
+wan_dir: null                  # Wan2.2-TI2V-5B directory (DiT weights)
+text_encoder_path: null        # models_t5_umt5-xxl-enc-bf16.pth
+image_encoder_path: null       # models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth
+vae_path: null                 # Wan2.2_VAE.pth
+tokenizer_path: google/umt5-xxl
+
+model:
+  _target_: spatial_umi_dream.model.WorldActionModel
+  config:
+    _target_: spatial_umi_dream.model.WorldActionModelConfig
+    wan_dit_path: ${wan_dir}
+    text_encoder_path: ${text_encoder_path}
+    image_encoder_path: ${image_encoder_path}
+    vae_path: ${vae_path}
+    # Initialise the DiT from the Wan2.2 release; a pretrained_model_path checkpoint is loaded on top.
+    load_wan_dit: true
+    # DiT tokens per latent frame: (canvas_height/16/2) * (canvas_width/16/2) for the 16x VAE
+    # downscale and the (1,2,2) patch stride.
+    frame_seqlen: 100
+    max_chunk_size: ${max_chunk_size}
+    # Causal block = 2 latent frames (8 raw frames at stride 3) and the 24 actions covering them.
+    num_frame_per_block: 2
+    num_action_per_block: 24
+    action_dim: ${max_action_dim}
+    action_horizon: ${action_horizon}
+    use_state: ${use_state}
+    max_state_dim: ${max_state_dim}
+    num_state_per_block: 1
+    # Wan2.2-TI2V-5B transformer size.
+    dim: 3072
+    ffn_dim: 14336
+    num_heads: 24
+    num_layers: 30
+    target_video_height: ${canvas_height}
+    target_video_width: ${canvas_width}
+    model_dtype: bfloat16
